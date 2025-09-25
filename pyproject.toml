@@ -1,0 +1,147 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "celeb-ai-art"
+version = "0.1.0"
+description = "Celebrity AI Art Generation - Dataset Management & Training System"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [
+    {name = "Your Name", email = "your.email@example.com"}
+]
+requires-python = ">=3.12"
+keywords = ["ai", "machine-learning", "computer-vision", "stable-diffusion", "lora", "celebrity", "dataset"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Multimedia :: Graphics",
+]
+
+dependencies = [
+    # Core ML/AI libraries
+    "torch>=2.1.0",
+    "torchvision>=0.16.0", 
+    "transformers>=4.35.0",
+    "diffusers>=0.24.0",
+    "accelerate>=0.24.0",
+    
+    # Computer Vision
+    "opencv-python>=4.8.0",
+    "Pillow>=10.1.0",
+    "face-recognition>=1.3.0",
+    "imagehash>=4.3.1",
+    
+    # Data Processing
+    "numpy>=1.25.0",
+    "pandas>=2.1.0",
+    "scikit-learn>=1.3.0",
+    
+    # Configuration and Serialization
+    "pyyaml>=6.0.1",
+    "pydantic>=2.5.0",
+    
+    # HTTP requests and web scraping
+    "requests>=2.31.0",
+    "beautifulsoup4>=4.12.0",
+    "selenium>=4.15.0",
+    
+    # Image processing and augmentation
+    "albumentations>=1.3.1",
+    "imgaug>=0.4.0",
+    
+    # Utilities
+    "tqdm>=4.66.0",
+    "python-dotenv>=1.0.0",
+    "rich>=13.7.0",  # For beautiful console output
+    "typer>=0.9.0",  # For CLI interface
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-cov>=4.1.0",
+    "black>=23.11.0",
+    "isort>=5.12.0",
+    "flake8>=6.1.0",
+    "mypy>=1.7.0",
+    "pre-commit>=3.5.0",
+]
+training = [
+    "huggingface-hub>=0.19.0",
+    "wandb>=0.16.0",
+    "tensorboard>=2.15.0",
+    "xformers>=0.0.22",  # For memory efficient attention
+]
+web = [
+    "fastapi>=0.104.0",
+    "uvicorn>=0.24.0",
+    "gradio>=4.8.0",  # For web UI
+]
+
+[project.urls]
+Homepage = "https://github.com/yourusername/celeb-ai-art"
+Repository = "https://github.com/yourusername/celeb-ai-art"
+Documentation = "https://github.com/yourusername/celeb-ai-art#readme"
+"Bug Tracker" = "https://github.com/yourusername/celeb-ai-art/issues"
+
+[project.scripts]
+celeb-ai = "src.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*"]
+exclude = ["tests*"]
+
+[tool.black]
+line-length = 100
+target-version = ['py312']
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  # directories
+  \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | build
+  | dist
+)/
+'''
+
+[tool.isort]
+profile = "black"
+line_length = 100
+multi_line_output = 3
+include_trailing_comma = true
+force_grid_wrap = 0
+use_parentheses = true
+ensure_newline_before_comments = true
+
+[tool.mypy]
+python_version = "3.12"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+strict_equality = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"
+python_functions = "test_*"
+addopts = "--cov=src --cov-report=term-missing --cov-report=html"
