@@ -1,3 +1,10 @@
+[tool.poetry]
+name = "celeb-ai-art"
+version = "0.1.0"
+description = "Celebrity AI Art Generation - Dataset Management & Training System"
+authors = ["Your Name <your.email@example.com>"]
+package-mode = false
+
 [build-system]
 requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
