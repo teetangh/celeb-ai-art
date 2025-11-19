@@ -7,7 +7,7 @@ dataset:
   base_path: datasets/celebrities
   batch_size: 4
   celebrity_list:
-  - sara_jay_001
+  - celebrity_001
   image_size: 512
   total_training_images: 419
   total_validation_images: 73
