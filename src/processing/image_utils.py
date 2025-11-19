@@ -127,17 +127,24 @@ class ImageProcessor:
     def center_crop_square(self, image_path: str, output_path: str, size: int = 512) -> bool:
         """
         Center crop image to square.
-        
+
         Args:
             image_path: Path to input image
             output_path: Path for output image
             size: Size of square crop
-            
+
         Returns:
             True if successful
         """
         try:
+            # Ensure output directory exists
+            output_dir = Path(output_path).parent
+            output_dir.mkdir(parents=True, exist_ok=True)
+
             with Image.open(image_path) as img:
+                # Convert to RGB if necessary
+                if img.mode != 'RGB':
+                    img = img.convert('RGB')
                 # Calculate crop box for center square
                 width, height = img.size
                 min_dimension = min(width, height)

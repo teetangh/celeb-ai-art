@@ -140,8 +140,8 @@ class DatasetManager:
             largest_face = None
 
             if skip_face_detection:
-                # Skip face detection - just resize image to 512x512
-                if self.image_processor.resize_image(image_path, str(face_output), size=(512, 512)):
+                # Skip face detection - center crop to square then resize to 512x512
+                if self.image_processor.center_crop_square(image_path, str(face_output), size=512):
                     pass  # Success, continue to metadata
                 else:
                     return False
