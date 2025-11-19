@@ -96,10 +96,18 @@ class ImageProcessor:
             True if successful
         """
         try:
+            # Ensure output directory exists
+            output_dir = Path(output_path).parent
+            output_dir.mkdir(parents=True, exist_ok=True)
+
             with Image.open(image_path) as img:
+                # Convert to RGB if necessary
+                if img.mode != 'RGB':
+                    img = img.convert('RGB')
+
                 if maintain_aspect_ratio:
                     img.thumbnail(size, Image.Resampling.LANCZOS)
-                    
+
                     # Create new image with target size and paste centered
                     new_img = Image.new('RGB', size, (255, 255, 255))
                     paste_x = (size[0] - img.size[0]) // 2
@@ -108,10 +116,10 @@ class ImageProcessor:
                     img = new_img
                 else:
                     img = img.resize(size, Image.Resampling.LANCZOS)
-                
+
                 img.save(output_path, 'JPEG', quality=95)
                 return True
-                
+
         except Exception as e:
             print(f"Error resizing image {image_path}: {e}")
             return False

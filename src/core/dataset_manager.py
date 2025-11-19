@@ -54,70 +54,76 @@ class DatasetManager:
         return celeb_path
     
     def process_raw_images(
-        self, 
-        celebrity_id: str, 
+        self,
+        celebrity_id: str,
         min_quality: float = 0.6,
         generate_captions: bool = True,
-        create_augmentations: bool = False
+        create_augmentations: bool = False,
+        skip_face_detection: bool = False
     ) -> int:
         """
         Process raw images for a celebrity.
-        
+
         Args:
             celebrity_id: Celebrity's unique ID
             min_quality: Minimum quality threshold
             generate_captions: Whether to generate training captions
             create_augmentations: Whether to create augmented versions
-            
+            skip_face_detection: Skip face detection and use full images
+
         Returns:
             Number of successfully processed images
         """
         print(f"📸 Processing raw images for {celebrity_id}...")
-        
+        if skip_face_detection:
+            print("⚠️  Face detection disabled - using full images")
+
         # Load existing dataset
         dataset = self.organizer.load_celebrity_dataset(celebrity_id)
         if not dataset:
             print(f"❌ Could not load dataset for {celebrity_id}")
             return 0
-        
+
         celeb_path = self.organizer.get_celebrity_path(celebrity_id)
         raw_dirs = ["high_quality", "medium_quality", "low_quality"]
         processed_count = 0
-        
+
         for quality_dir in raw_dirs:
             raw_path = celeb_path / "raw" / quality_dir
             if not raw_path.exists():
                 continue
-            
-            image_files = list(raw_path.glob("*.jpg")) + list(raw_path.glob("*.jpeg")) + list(raw_path.glob("*.png"))
-            
+
+            image_files = list(raw_path.glob("*.jpg")) + list(raw_path.glob("*.jpeg")) + list(raw_path.glob("*.png")) + list(raw_path.glob("*.webp"))
+
             for image_file in tqdm(image_files, desc=f"Processing {quality_dir}"):
                 if self._process_single_image(
-                    str(image_file), 
-                    celebrity_id, 
-                    dataset, 
+                    str(image_file),
+                    celebrity_id,
+                    dataset,
                     min_quality,
-                    generate_captions
+                    generate_captions,
+                    skip_face_detection
                 ):
                     processed_count += 1
-        
+
         # Save updated dataset
         self.organizer.save_celebrity_dataset(celebrity_id, dataset)
-        
+
         # Create augmentations if requested
         if create_augmentations and processed_count > 0:
             self._create_augmentations(celebrity_id)
-        
+
         print(f"✅ Processed {processed_count} images for {celebrity_id}")
         return processed_count
     
     def _process_single_image(
-        self, 
-        image_path: str, 
-        celebrity_id: str, 
+        self,
+        image_path: str,
+        celebrity_id: str,
         dataset: CelebrityDataset,
         min_quality: float,
-        generate_captions: bool
+        generate_captions: bool,
+        skip_face_detection: bool = False
     ) -> bool:
         """Process a single raw image."""
         try:
@@ -125,49 +131,59 @@ class DatasetManager:
             quality_score = self.quality_assessor.calculate_quality_score(image_path)
             if quality_score < min_quality:
                 return False
-            
-            # Detect faces
-            faces = self.face_detector.detect_faces_dlib(image_path)
-            if not faces:
-                return False
-            
-            # Get largest face
-            largest_face = self.face_detector.get_largest_face(faces)
-            if not largest_face or not self.face_detector.is_face_visible(largest_face):
-                return False
-            
+
             # Generate output filename
             base_name = f"{celebrity_id}_{len(dataset.images):04d}"
-            
-            # Process face crop
             celeb_path = self.organizer.get_celebrity_path(celebrity_id)
             face_output = celeb_path / "processed" / "face_crops" / f"{base_name}_crop.jpg"
-            
-            if self.image_processor.crop_face(image_path, largest_face, str(face_output)):
-                # Generate caption if requested
-                caption = ""
-                if generate_captions:
-                    caption = self.caption_generator.generate_caption(dataset.celebrity_info)
-                
-                # Create metadata
-                image_metadata = ImageMetadata(
-                    filename=f"{base_name}_crop.jpg",
-                    source_url=None,
-                    quality_score=quality_score,
-                    quality_level=self.quality_assessor.get_quality_level(quality_score),
-                    face_detection=largest_face,
-                    caption=caption,
-                    processed_date=datetime.now().isoformat(),
-                    dimensions=self.quality_assessor.get_image_dimensions(str(face_output)),
-                    file_size=int(self.quality_assessor.get_file_size_mb(str(face_output)) * 1024 * 1024)
-                )
-                
-                dataset.images.append(image_metadata)
-                return True
-                
+
+            largest_face = None
+
+            if skip_face_detection:
+                # Skip face detection - just resize image to 512x512
+                if self.image_processor.resize_image(image_path, str(face_output), size=(512, 512)):
+                    pass  # Success, continue to metadata
+                else:
+                    return False
+            else:
+                # Detect faces
+                faces = self.face_detector.detect_faces_dlib(image_path)
+                if not faces:
+                    return False
+
+                # Get largest face
+                largest_face = self.face_detector.get_largest_face(faces)
+                if not largest_face or not self.face_detector.is_face_visible(largest_face):
+                    return False
+
+                # Process face crop
+                if not self.image_processor.crop_face(image_path, largest_face, str(face_output)):
+                    return False
+
+            # Generate caption if requested
+            caption = ""
+            if generate_captions:
+                caption = self.caption_generator.generate_caption(dataset.celebrity_info)
+
+            # Create metadata
+            image_metadata = ImageMetadata(
+                filename=f"{base_name}_crop.jpg",
+                source_url=None,
+                quality_score=quality_score,
+                quality_level=self.quality_assessor.get_quality_level(quality_score),
+                face_detection=largest_face,
+                caption=caption,
+                processed_date=datetime.now().isoformat(),
+                dimensions=self.quality_assessor.get_image_dimensions(str(face_output)),
+                file_size=int(self.quality_assessor.get_file_size_mb(str(face_output)) * 1024 * 1024)
+            )
+
+            dataset.images.append(image_metadata)
+            return True
+
         except Exception as e:
             print(f"Error processing {image_path}: {e}")
-        
+
         return False
     
     def create_training_split(

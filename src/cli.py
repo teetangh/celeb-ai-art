@@ -64,21 +64,23 @@ def process(
     celebrity_id: str = typer.Option(..., help="Celebrity ID to process"),
     min_quality: float = typer.Option(0.6, help="Minimum quality threshold"),
     generate_captions: bool = typer.Option(True, help="Generate training captions"),
-    create_augmentations: bool = typer.Option(False, help="Create augmented versions")
+    create_augmentations: bool = typer.Option(False, help="Create augmented versions"),
+    skip_face_detection: bool = typer.Option(False, "--skip-face-detection", help="Skip face detection, use full images")
 ):
     """Process raw images for a celebrity."""
     manager = DatasetManager(path)
-    
+
     with Progress() as progress:
         task = progress.add_task(f"Processing {celebrity_id}...", total=None)
-        
+
         processed_count = manager.process_raw_images(
             celebrity_id=celebrity_id,
             min_quality=min_quality,
             generate_captions=generate_captions,
-            create_augmentations=create_augmentations
+            create_augmentations=create_augmentations,
+            skip_face_detection=skip_face_detection
         )
-    
+
     if processed_count > 0:
         console.print(f"✅ Processed {processed_count} images for {celebrity_id}", style="green")
     else:
