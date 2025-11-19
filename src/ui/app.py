@@ -1,17 +1,40 @@
-"""Gradio UI for celebrity image generation."""
+"""Gradio UI for celebrity image generation with quality enhancements."""
 
 import argparse
 from pathlib import Path
 from typing import Optional
 
 import gradio as gr
+import numpy as np
 import torch
 from diffusers import StableDiffusionPipeline, DPMSolverMultistepScheduler
 from peft import PeftModel
+from PIL import Image
+
+# Try to import face restoration
+try:
+    from gfpgan import GFPGANer
+    GFPGAN_AVAILABLE = True
+except ImportError:
+    GFPGAN_AVAILABLE = False
+    print("GFPGAN not available - face restoration disabled")
+
+
+# Enhanced negative prompts for better anatomy
+DEFAULT_NEGATIVE_PROMPT = (
+    "blurry, low quality, distorted, deformed, ugly, bad anatomy, "
+    "bad hands, missing fingers, extra fingers, fused fingers, too many fingers, "
+    "mutated hands, malformed limbs, extra limbs, missing limbs, "
+    "disfigured, gross proportions, long neck, duplicate, "
+    "morbid, mutilated, poorly drawn hands, poorly drawn face, "
+    "mutation, ugly, bad proportions, cloned face, "
+    "extra arms, extra legs, fused limbs, too many limbs, "
+    "wrong anatomy, liquid fingers, missing arms, missing legs"
+)
 
 
 class ImageGenerator:
-    """Image generator with LoRA support."""
+    """Image generator with LoRA support and quality enhancements."""
 
     def __init__(
         self,
@@ -25,6 +48,7 @@ class ImageGenerator:
         self.trigger_word = trigger_word
         self.device = device
         self.pipe = None
+        self.face_enhancer = None
 
     def load_model(self):
         """Load the Stable Diffusion model with LoRA."""
@@ -65,7 +89,50 @@ class ImageGenerator:
             except Exception:
                 pass  # xformers not available
 
+        # Load face enhancer
+        if GFPGAN_AVAILABLE:
+            try:
+                self.face_enhancer = GFPGANer(
+                    model_path='https://github.com/TencentARC/GFPGAN/releases/download/v1.3.0/GFPGANv1.3.pth',
+                    upscale=1,
+                    arch='clean',
+                    channel_multiplier=2,
+                    bg_upsampler=None
+                )
+                print("Face enhancer loaded!")
+            except Exception as e:
+                print(f"Failed to load face enhancer: {e}")
+                self.face_enhancer = None
+
         print("Model loaded successfully!")
+
+    def enhance_face(self, image: Image.Image) -> Image.Image:
+        """Apply face restoration using GFPGAN."""
+        if self.face_enhancer is None:
+            return image
+
+        try:
+            # Convert PIL to numpy
+            img_array = np.array(image)
+
+            # Run face enhancement
+            _, _, output = self.face_enhancer.enhance(
+                img_array,
+                has_aligned=False,
+                only_center_face=False,
+                paste_back=True
+            )
+
+            # Convert back to PIL
+            return Image.fromarray(output)
+        except Exception as e:
+            print(f"Face enhancement failed: {e}")
+            return image
+
+    def upscale_image(self, image: Image.Image, scale: int = 2) -> Image.Image:
+        """Simple upscaling using Lanczos interpolation."""
+        new_size = (image.width * scale, image.height * scale)
+        return image.resize(new_size, Image.LANCZOS)
 
     def generate(
         self,
@@ -76,14 +143,20 @@ class ImageGenerator:
         width: int = 512,
         height: int = 512,
         seed: int = -1,
+        enhance_face: bool = True,
+        upscale: bool = False,
     ):
-        """Generate an image from prompt."""
+        """Generate an image from prompt with optional enhancements."""
         if self.pipe is None:
             self.load_model()
 
         # Add trigger word to prompt
         if self.trigger_word and self.trigger_word not in prompt.lower():
             prompt = f"{self.trigger_word} {prompt}"
+
+        # Add quality boosters to prompt
+        if "professional" not in prompt.lower() and "high quality" not in prompt.lower():
+            prompt = f"{prompt}, high quality, detailed, sharp focus"
 
         print(f"Generating: {prompt}")
 
@@ -92,10 +165,14 @@ class ImageGenerator:
         if seed >= 0:
             generator = torch.Generator(device=self.device).manual_seed(seed)
 
+        # Use enhanced negative prompt if default
+        if not negative_prompt or negative_prompt == DEFAULT_NEGATIVE_PROMPT:
+            negative_prompt = DEFAULT_NEGATIVE_PROMPT
+
         # Generate image
         result = self.pipe(
             prompt=prompt,
-            negative_prompt=negative_prompt or "blurry, low quality, distorted, deformed",
+            negative_prompt=negative_prompt,
             num_inference_steps=num_inference_steps,
             guidance_scale=guidance_scale,
             width=width,
@@ -103,7 +180,19 @@ class ImageGenerator:
             generator=generator,
         )
 
-        return result.images[0]
+        image = result.images[0]
+
+        # Apply face enhancement
+        if enhance_face and GFPGAN_AVAILABLE:
+            print("Enhancing face...")
+            image = self.enhance_face(image)
+
+        # Apply upscaling
+        if upscale:
+            print("Upscaling image...")
+            image = self.upscale_image(image, scale=2)
+
+        return image
 
 
 def create_ui(generator: ImageGenerator):
@@ -117,6 +206,8 @@ def create_ui(generator: ImageGenerator):
         width,
         height,
         seed,
+        enhance_face,
+        upscale,
     ):
         """Wrapper for image generation."""
         try:
@@ -128,13 +219,15 @@ def create_ui(generator: ImageGenerator):
                 width=int(width),
                 height=int(height),
                 seed=int(seed),
+                enhance_face=enhance_face,
+                upscale=upscale,
             )
             return image
         except Exception as e:
             raise gr.Error(f"Generation failed: {str(e)}")
 
     # Create interface
-    with gr.Blocks(title="Celebrity AI Art Generator") as demo:
+    with gr.Blocks(title="Celebrity AI Art Generator", theme=gr.themes.Soft()) as demo:
         gr.Markdown("# Celebrity AI Art Generator")
         gr.Markdown(f"Use the trigger word **{generator.trigger_word}** in your prompts for best results.")
 
@@ -147,8 +240,8 @@ def create_ui(generator: ImageGenerator):
                 )
                 negative_prompt = gr.Textbox(
                     label="Negative Prompt",
-                    value="blurry, low quality, distorted, deformed, ugly",
-                    lines=2,
+                    value=DEFAULT_NEGATIVE_PROMPT,
+                    lines=3,
                 )
 
                 with gr.Row():
@@ -161,7 +254,7 @@ def create_ui(generator: ImageGenerator):
                     )
                     guidance = gr.Slider(
                         minimum=1,
-                        maximum=15,
+                        maximum=20,
                         value=7.5,
                         step=0.5,
                         label="Guidance Scale",
@@ -188,18 +281,48 @@ def create_ui(generator: ImageGenerator):
                     value=-1,
                 )
 
-                generate_btn = gr.Button("Generate", variant="primary")
+                with gr.Row():
+                    enhance_face = gr.Checkbox(
+                        label="Face Enhancement (GFPGAN)",
+                        value=GFPGAN_AVAILABLE,
+                        interactive=GFPGAN_AVAILABLE,
+                    )
+                    upscale = gr.Checkbox(
+                        label="2x Upscale",
+                        value=False,
+                    )
+
+                generate_btn = gr.Button("Generate", variant="primary", size="lg")
 
             with gr.Column(scale=1):
                 output_image = gr.Image(label="Generated Image", type="pil")
 
+        # Tips
+        with gr.Accordion("Tips for Better Results", open=False):
+            gr.Markdown("""
+            **For better anatomy:**
+            - Use specific poses: "standing", "sitting", "portrait"
+            - Add quality terms: "professional photo", "sharp focus", "detailed"
+            - Avoid complex multi-person scenes
+
+            **For better faces:**
+            - Enable Face Enhancement (GFPGAN)
+            - Use "portrait" or "headshot" in prompt
+            - Higher guidance scale (8-12) for more defined features
+
+            **For consistent results:**
+            - Set a specific seed number
+            - Use 30-40 steps for quality
+            """)
+
         # Examples
         gr.Examples(
             examples=[
+                ["sara jay portrait, professional headshot, studio lighting, sharp focus"],
                 ["sara jay swimming in the ocean, sunny day, beach, professional photo"],
-                ["sara jay at a coffee shop, casual outfit, natural lighting"],
-                ["sara jay portrait, studio lighting, professional headshot"],
-                ["sara jay in a garden, flowers, spring, bright colors"],
+                ["sara jay at a coffee shop, casual outfit, natural lighting, bokeh"],
+                ["sara jay in a garden, flowers, spring, bright colors, detailed"],
+                ["sara jay fitness, gym, athletic wear, professional photography"],
             ],
             inputs=[prompt],
         )
@@ -207,7 +330,7 @@ def create_ui(generator: ImageGenerator):
         # Connect button
         generate_btn.click(
             fn=generate_image,
-            inputs=[prompt, negative_prompt, steps, guidance, width, height, seed],
+            inputs=[prompt, negative_prompt, steps, guidance, width, height, seed, enhance_face, upscale],
             outputs=[output_image],
         )
 

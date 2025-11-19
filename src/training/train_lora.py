@@ -99,13 +99,15 @@ class LoRATrainer:
         self,
         pretrained_model: str = "runwayml/stable-diffusion-v1-5",
         output_dir: str = "./outputs",
-        learning_rate: float = 1e-4,
+        learning_rate: float = 5e-5,  # Lower for stability
         train_batch_size: int = 1,
         gradient_accumulation_steps: int = 4,
-        max_train_steps: int = 1000,
-        lora_rank: int = 4,
+        max_train_steps: int = 1500,  # More steps for better quality
+        lora_rank: int = 16,  # Higher rank for more detail
         lora_alpha: int = 32,
         seed: int = 42,
+        use_8bit_adam: bool = False,
+        gradient_checkpointing: bool = True,
     ):
         self.pretrained_model = pretrained_model
         self.output_dir = Path(output_dir)
@@ -116,6 +118,8 @@ class LoRATrainer:
         self.lora_rank = lora_rank
         self.lora_alpha = lora_alpha
         self.seed = seed
+        self.use_8bit_adam = use_8bit_adam
+        self.gradient_checkpointing = gradient_checkpointing
 
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -333,11 +337,12 @@ def main():
     parser.add_argument("--celebrity-id", type=str, required=True, help="Celebrity ID")
     parser.add_argument("--output-dir", type=str, default="./outputs", help="Output directory")
     parser.add_argument("--trigger-word", type=str, default="ohwx", help="Trigger word")
-    parser.add_argument("--learning-rate", type=float, default=1e-4, help="Learning rate")
-    parser.add_argument("--max-train-steps", type=int, default=1000, help="Max training steps")
+    parser.add_argument("--learning-rate", type=float, default=5e-5, help="Learning rate (default: 5e-5)")
+    parser.add_argument("--max-train-steps", type=int, default=1500, help="Max training steps (default: 1500)")
     parser.add_argument("--batch-size", type=int, default=1, help="Batch size")
-    parser.add_argument("--lora-rank", type=int, default=4, help="LoRA rank")
+    parser.add_argument("--lora-rank", type=int, default=16, help="LoRA rank (default: 16, higher=more detail)")
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
+    parser.add_argument("--gradient-checkpointing", action="store_true", default=True, help="Enable gradient checkpointing")
 
     args = parser.parse_args()
 
@@ -348,6 +353,7 @@ def main():
         max_train_steps=args.max_train_steps,
         lora_rank=args.lora_rank,
         seed=args.seed,
+        gradient_checkpointing=args.gradient_checkpointing,
     )
 
     trainer.train(
